@@ -604,7 +604,7 @@ class VPNGateProManager:
             asyncio.create_task(log_reader())
             
             # Start port forwarding
-            self.netns_mgr.start_port_forward()
+            self.netns_mgr.start_port_forward(listen_host=self.config.get("proxy_host", "127.0.0.1"))
         except Exception as e:
             print(f"[Proxy] Failed to spawn proxy subprocess: {e}", flush=True)
 

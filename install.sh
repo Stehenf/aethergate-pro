@@ -43,10 +43,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Copy main files
 cp "${SCRIPT_DIR}/main.py" "${TARGET_DIR}/"
-cp "${SCRIPT_DIR}"/core/*.py "${TARGET_DIR}/core/"
-cp "${SCRIPT_DIR}"/web/* "${TARGET_DIR}/web/"
+cp -r "${SCRIPT_DIR}/core/"* "${TARGET_DIR}/core/"
+cp -r "${SCRIPT_DIR}/web/"* "${TARGET_DIR}/web/"
 
 chmod +x "${TARGET_DIR}/main.py"
+chmod +x "${TARGET_DIR}"/core/*.sh 2>/dev/null || true
 
 # Preserve old IP cache if available, to speed up startup geolocations
 OLD_CACHE="/opt/aimilivpn/vpngate_data/ip_cache.json"

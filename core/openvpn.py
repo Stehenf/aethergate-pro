@@ -79,6 +79,8 @@ class OpenVPNRunner:
             "--data-ciphers", "AES-128-CBC:AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305",
             "--script-security", "2",
             "--tls-verify", "/bin/true",
+            "--up", "/opt/vpngate-pro/core/dns_up.sh",
+            "--down", "/opt/vpngate-pro/core/dns_down.sh",
         ]
         
         print(f"[OpenVPN] Launching OpenVPN for node {node_id}: {' '.join(cmd)}", flush=True)
