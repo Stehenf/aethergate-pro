@@ -256,7 +256,13 @@ class CandidateScraper:
                 n["location"] = cached.get("location", "")
                 n["ip_type"] = cached.get("ip_type", "untested")
                 n["quality"] = cached.get("quality", "normal")
-                n["scamalytics_score"] = cached.get("scamalytics_score")
+                
+                cached_score = cached.get("scamalytics_score")
+                if cached_score is not None or not fetch_scamalytics:
+                    n["scamalytics_score"] = cached_score
+                else:
+                    if ip not in ips_to_query:
+                        ips_to_query.append(ip)
             else:
                 if ip not in ips_to_query:
                     ips_to_query.append(ip)

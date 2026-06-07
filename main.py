@@ -523,9 +523,10 @@ class VPNGateProManager:
                     cache = await asyncio.to_thread(self.scraper.load_cache)
                     
                 score = None
-                if ip in cache and "scamalytics_score" in cache[ip]:
+                if ip in cache and cache[ip].get("scamalytics_score") is not None:
                     score = cache[ip]["scamalytics_score"]
                 else:
+                    print(f"[Scamalytics] Cache miss/None for {ip}. Querying Scamalytics API...", flush=True)
                     score = await self.scraper.get_scamalytics_score(ip)
                     # Add to cache
                     if ip not in cache:
@@ -544,6 +545,7 @@ class VPNGateProManager:
                     await asyncio.sleep(1.5) # Rate limit delay
                 
                 # Save score back to database
+                print(f"[Scamalytics] Backpopulating score {score} for node {target['id']} ({ip})", flush=True)
                 await self.update_node_score(target["id"], score)
                 
             except Exception as e:
