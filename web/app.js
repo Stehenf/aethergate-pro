@@ -120,6 +120,11 @@ function syncSettingsForm() {
     
     if (connEnabled) connEnabled.checked = appState.settings.connection_enabled || false;
     
+    const usernameEl = document.getElementById("setting-username");
+    if (usernameEl && appState.settings.username && !usernameEl.value) {
+        usernameEl.value = appState.settings.username;
+    }
+    
     toggleSettingsVisibility();
 }
 
@@ -160,6 +165,53 @@ async function saveSettings(event) {
         fetchNodesData();
     } catch (err) {
         addDiagnosticLine(`[设置保存失败]: ${err}`);
+    }
+}
+
+// Update Credentials Event Handler
+async function updateCredentials(event) {
+    if (event) event.preventDefault();
+    
+    const username = document.getElementById("setting-username").value.trim();
+    const password = document.getElementById("setting-password").value.trim();
+    
+    if (!username || !password) {
+        alert("用户名和密码不能为空！");
+        return;
+    }
+    
+    const payload = {
+        username: username,
+        password: password
+    };
+    
+    try {
+        const res = await fetch(`${apiPrefix}/api/settings`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        
+        if (res.status === 401) {
+            alert("会话已失效，请重新登录！");
+            window.location.reload();
+            return;
+        }
+        
+        const data = await res.json();
+        if (res.ok) {
+            if (data.require_relogin) {
+                alert("登录凭证（用户名/密码）已更新！请使用新凭证重新登录。");
+                window.location.reload();
+            } else {
+                addDiagnosticLine(`[凭证更新成功]: 用户名已变更为 ${username}`);
+            }
+        } else {
+            alert(`凭证更新失败: ${data.error || "未知错误"}`);
+        }
+    } catch (err) {
+        addDiagnosticLine(`[凭证更新失败]: ${err}`);
+        alert(`凭证更新请求失败: ${err}`);
     }
 }
 
@@ -205,9 +257,11 @@ function renderUIPanels() {
         
         const score = activeNode.scamalytics_score;
         let scoreHTML = "-";
-        if (score !== null && score !== undefined) {
+        if (score !== null && score !== undefined && score >= 0) {
             const levelClass = score >= 50 ? "risk-high" : (score >= 10 ? "risk-med" : "risk-low");
             scoreHTML = `<span class="risk-badge ${levelClass}">${score} / 100 (${translateRisk(score)})</span>`;
+        } else if (score === -1) {
+            scoreHTML = `<span class="risk-badge risk-unknown">检测失败</span>`;
         }
         document.getElementById("active-scamalytics").innerHTML = scoreHTML;
         
@@ -359,9 +413,11 @@ function renderNodesTable() {
         // Scamalytics rendering
         const score = n.scamalytics_score;
         let scoreTag = "-";
-        if (score !== null && score !== undefined) {
+        if (score !== null && score !== undefined && score >= 0) {
             const scoreClass = score >= 50 ? "risk-high" : (score >= 10 ? "risk-med" : "risk-low");
             scoreTag = `<span class="risk-badge ${scoreClass}">${score} (${translateRisk(score)})</span>`;
+        } else if (score === -1) {
+            scoreTag = `<span class="risk-badge risk-unknown">检测失败</span>`;
         }
         
         // Connect button behavior
@@ -506,6 +562,7 @@ function translateIpType(type) {
 }
 
 function translateRisk(score) {
+    if (score < 0) return "未知";
     if (score >= 50) return "高风险";
     if (score >= 10) return "中风险";
     return "低风险";

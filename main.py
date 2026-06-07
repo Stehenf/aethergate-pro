@@ -105,6 +105,7 @@ class VPNGateProManager:
             "fixed_node_id": self.config.get("fixed_node_id"),
             "scamalytics_threshold": self.config.get("scamalytics_threshold"),
             "secret_path": self.config.get("secret_path"),
+            "username": self.config.get("username", "admin"),
             
             "is_connecting": self.is_connecting,
             "last_check_message": self.last_check_message,

@@ -234,6 +234,26 @@
                     </form>
                 </div>
 
+                <!-- USER CREDENTIALS CARD -->
+                <div class="card spotlight settings-card">
+                    <div class="card-header">
+                        <h2>安全凭证设置</h2>
+                    </div>
+                    <form id="credentials-form" class="settings-form" onsubmit="updateCredentials(event)">
+                        <div class="form-group">
+                            <label for="setting-username">管理员用户名</label>
+                            <input type="text" id="setting-username" class="form-control" required placeholder="输入新用户名">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="setting-password">新登录密码</label>
+                            <input type="password" id="setting-password" class="form-control" required placeholder="输入新密码">
+                        </div>
+
+                        <button type="submit" class="btn btn-secondary btn-block btn-glow">更新安全凭证</button>
+                    </form>
+                </div>
+
                 <!-- ACTIVE CONNECTION DETAILED PARAMETERS WITH VISUAL TOPOLOGY -->
                 <div class="card spotlight status-card-detailed">
                     <div class="card-header">

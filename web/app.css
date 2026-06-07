@@ -840,6 +840,10 @@ input:checked + .slider:before {
     background: rgba(244, 63, 94, 0.1);
     color: #fb7185;
 }
+.risk-unknown {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+}
 
 .type-badge {
     background: rgba(255, 255, 255, 0.04);

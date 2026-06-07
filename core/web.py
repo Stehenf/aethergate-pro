@@ -247,8 +247,36 @@ class AsyncWebServer:
     async def handle_save_settings(self, writer, body):
         try:
             payload = json.loads(body.decode("utf-8"))
+            
+            # Check if username or password is being changed
+            credentials_changed = False
+            new_username = payload.get("username")
+            new_password = payload.get("password")
+            
+            if new_username is not None or new_password is not None:
+                # Validate
+                if new_username is not None and not new_username.strip():
+                    self.send_json(writer, {"error": "用户名不能为空"}, 400)
+                    return
+                if new_password is not None and not new_password.strip():
+                    self.send_json(writer, {"error": "密码不能为空"}, 400)
+                    return
+                credentials_changed = True
+            
             await self.manager.update_settings(payload)
-            self.send_json(writer, {"success": True, "message": "设置已保存"})
+            
+            if credentials_changed:
+                # Clear all active sessions to force re-login
+                self.sessions.clear()
+                # Clear cookie by setting expired session cookie
+                cookie_header = "session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+                self.send_json(
+                    writer, 
+                    {"success": True, "message": "凭证已更新，请重新登录", "require_relogin": True}, 
+                    headers={"Set-Cookie": cookie_header}
+                )
+            else:
+                self.send_json(writer, {"success": True, "message": "设置已保存"})
         except Exception as e:
             self.send_json(writer, {"error": str(e)}, 400)
 
