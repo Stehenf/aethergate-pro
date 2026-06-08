@@ -433,18 +433,18 @@ function renderNodesTable() {
             connButton = `<button class="btn btn-secondary btn-sm" disabled>工作节点</button>`;
         } else {
             const isDisabled = appState.isConnecting || !appState.settings.connection_enabled;
-            connButton = `<button class="btn btn-primary btn-sm" ${isDisabled ? 'disabled' : ''} onclick="connectNode(event, ${nodeIdArg})">接入</button>`;
+            connButton = `<button class="btn btn-primary btn-sm" ${isDisabled ? 'disabled' : ''} onclick="connectNode(event, ${htmlEscape(nodeIdArg)})">接入</button>`;
         }
         
         // Test button behavior
         const isTesting = appState.testingNodeIds.has(n.id);
-        const testButton = `<button class="btn btn-secondary btn-sm" ${isTesting ? 'disabled' : ''} onclick="testNode(event, this, ${nodeIdArg})">${isTesting ? '正在探测' : '测速'}</button>`;
+        const testButton = `<button class="btn btn-secondary btn-sm" ${isTesting ? 'disabled' : ''} onclick="testNode(event, this, ${htmlEscape(nodeIdArg)})">${isTesting ? '正在探测' : '测速'}</button>`;
         
         const flag = getFlagEmoji(n.country);
         const location = htmlEscape(n.location || n.country || "-");
         const owner = htmlEscape(n.owner || n.as_name || "-");
         
-        return `<tr ${rowClass} ondblclick="lockNodeId(${nodeIdArg})" title="双击直接锁定此 IP">
+        return `<tr ${rowClass} ondblclick="lockNodeId(${htmlEscape(nodeIdArg)})" title="双击直接锁定此 IP">
             <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
             <td>${latencyText}</td>
             <td class="mono">${htmlEscape(n.ip || "-")}</td>
@@ -509,6 +509,16 @@ async function connectNode(event, nodeId) {
     if (event) event.stopPropagation();
     if (appState.isConnecting) return;
     
+    let btnElement = null;
+    if (event && event.target && event.target.tagName === "BUTTON") {
+        btnElement = event.target;
+        btnElement.disabled = true;
+        btnElement.innerHTML = `接入中...`;
+    }
+    
+    appState.isConnecting = true;
+    renderUIPanels();
+    
     addDiagnosticLine(`[控制面板]: 发起强制切换到节点=${nodeId.substring(0, 12)}...`);
     try {
         const res = await fetch(`${apiPrefix}/api/connect`, {
@@ -516,19 +526,33 @@ async function connectNode(event, nodeId) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ node_id: nodeId })
         });
-        fetchNodesData();
+        await fetchNodesData();
     } catch (err) {
         addDiagnosticLine(`[切换连接失败]: ${err}`);
+        appState.isConnecting = false;
+        renderNodesTable();
+        renderUIPanels();
     }
 }
 
 async function disconnectNode() {
     addDiagnosticLine("[控制面板]: 手动断开当前网络隧道连接");
+    
+    const btnDisconnect = document.getElementById("btn-quick-disconnect");
+    if (btnDisconnect) {
+        btnDisconnect.disabled = true;
+        btnDisconnect.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在断开...`;
+    }
+    
     try {
         await fetch(`${apiPrefix}/api/disconnect`, { method: "POST" });
-        fetchNodesData();
+        await fetchNodesData();
     } catch (err) {
         addDiagnosticLine(`[断开隧道失败]: ${err}`);
+    } finally {
+        if (btnDisconnect) {
+            btnDisconnect.innerHTML = `<i class="fas fa-power-off"></i> 断开连接`;
+        }
     }
 }
 
