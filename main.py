@@ -10,6 +10,11 @@ import secrets
 import tempfile
 from pathlib import Path
 
+import socket
+
+# Set global socket default timeout to prevent blocking thread pool indefinitely
+socket.setdefaulttimeout(15.0)
+
 # Add project root to path for local imports
 sys.path.append(str(Path(__file__).parent))
 
@@ -345,19 +350,24 @@ class VPNGateProManager:
     async def diagnose_connection(self) -> bool:
         """Test proxy tunnel connectivity."""
         print("[Watchdog] Running proxy connectivity diagnosis...", flush=True)
-        proxy_url = f"http://127.0.0.1:{self.config.get('proxy_port', 7928)}"
+        proxy_port = self.config.get("proxy_port", 7928)
         
-        def check():
-            try:
-                proxy_support = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
-                opener = urllib.request.build_opener(proxy_support)
-                with opener.open("http://www.msftconnecttest.com/connecttest.txt", timeout=5) as r:
-                    content = r.read().decode().strip()
-                    return "Microsoft Connect Test" in content
-            except Exception:
-                return False
+        # Build curl command to test proxy asynchronously with timeout
+        cmd = [
+            "curl", "-s", "-x", f"http://127.0.0.1:{proxy_port}",
+            "-m", "5", "http://www.msftconnecttest.com/connecttest.txt"
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=6.0)
+            ok = "Microsoft Connect Test" in stdout.decode(errors="replace")
+        except Exception:
+            ok = False
 
-        ok = await asyncio.to_thread(check)
         self.proxy_ok = ok
         
         async with self.state_lock:
