@@ -43,6 +43,19 @@
                     <div class="h-badge"><span class="lbl">PORT</span><span class="val">7928</span></div>
                     <div class="h-badge"><span class="lbl">PROTO</span><span class="val">MIXED</span></div>
                 </div>
+                
+                <!-- Theme Toggle Button -->
+                <button id="btn-theme-toggle" class="btn btn-secondary btn-icon-only btn-glow" title="切换主题" onclick="toggleTheme()">
+                    <!-- Moon icon (shows in light theme to switch to dark) -->
+                    <svg id="theme-moon-icon" viewBox="0 0 20 20" fill="currentColor" class="icon" style="width: 18px; height: 18px;">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                    </svg>
+                    <!-- Sun icon (shows in dark theme to switch to light) -->
+                    <svg id="theme-sun-icon" viewBox="0 0 20 20" fill="currentColor" class="icon" style="display: none; width: 18px; height: 18px;">
+                        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.46 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+
                 <button id="btn-quick-disconnect" class="btn btn-danger btn-sm btn-glow" disabled onclick="disconnectNode()">
                     <svg viewBox="0 0 20 20" fill="currentColor" class="icon">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 2.839A6.978 6.978 0 0110 2c3.866 0 7 3.134 7 7a6.978 6.978 0 01-.839 2H10V2.839z" clip-rule="evenodd" />
@@ -101,6 +114,147 @@
                     <h3 class="stat-val mono" id="active-uptime">00:00:00</h3>
                 </div>
             </div>
+        </div>
+
+        <!-- TOP DASHBOARD GRID (控制面板与拓扑网) -->
+        <div class="top-dashboard-grid" style="margin-bottom: 2.5rem;">
+            
+            <!-- CARD 1: 智能隔离路由控制中心 -->
+            <div class="card spotlight settings-card top-settings-card">
+                <div class="card-header" style="margin-bottom: 1rem;">
+                    <h2 style="display: flex; align-items: center; gap: 0.5rem;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.43l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.645-.869l.214-1.28z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        智能隔离路由控制
+                    </h2>
+                </div>
+                <form id="settings-form" class="settings-form settings-grid-form" onsubmit="saveSettings(event)">
+                    <!-- Group 1: Routing Mode + Cond Inputs -->
+                    <div class="form-group-container">
+                        <div class="form-group">
+                            <label for="setting-routing-mode">网关选路模式</label>
+                            <div class="select-wrapper">
+                                <select id="setting-routing-mode" class="form-control" onchange="toggleSettingsVisibility()">
+                                    <option value="auto">自动选择最佳（推荐）</option>
+                                    <option value="fixed_ip">锁定固定 IP 节点</option>
+                                    <option value="fixed_region">锁定特定国家地区</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group" id="group-force-country" style="display: none; margin-top: 0.5rem;">
+                            <label for="setting-force-country">锁定国家代码</label>
+                            <input type="text" id="setting-force-country" class="form-control text-uppercase" placeholder="例如: JP, US, KR">
+                        </div>
+                        <div class="form-group" id="group-fixed-node" style="display: none; margin-top: 0.5rem;">
+                            <label for="setting-fixed-node">锁定节点 ID</label>
+                            <input type="text" id="setting-fixed-node" class="form-control mono" readonly placeholder="双击下方列表行锁定">
+                        </div>
+                    </div>
+
+                    <!-- Right Column details inside form -->
+                    <div class="form-right-column" style="display: flex; flex-direction: column; gap: 1rem;">
+                        <!-- Group 2: Scamalytics range -->
+                        <div class="form-group">
+                            <label style="margin-bottom: 0.25rem;">
+                                <span>风控评分阈值上限</span>
+                                <span class="badge badge-primary" id="scamalytics-val">10</span>
+                            </label>
+                            <input type="range" id="setting-scamalytics" min="0" max="100" value="10" class="range-slider" oninput="document.getElementById('scamalytics-val').textContent=this.value">
+                        </div>
+
+                        <!-- Group 3: Switch -->
+                        <div class="form-group toggle-group" style="flex-direction: row; justify-content: space-between; align-items: center; border-bottom: none; padding-bottom: 0; margin-top: 0.25rem;">
+                            <div class="toggle-info">
+                                <label class="toggle-title" style="margin-bottom: 0.125rem; font-size: 0.8125rem;">隔离网关总闸</label>
+                                <p class="help-text" style="font-size: 0.72rem; line-height: 1.2;">控制自动维护后台 VPN 隧道</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="setting-connection-enabled">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Group 4: Submit Button (Spanning full width of form grid) -->
+                    <div class="form-group submit-group" style="grid-column: span 2; margin-top: 0.5rem;">
+                        <button type="submit" class="btn btn-primary btn-block btn-glow" style="height: 44px; border-radius: 14px;">保存并应用配置</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- CARD 2: 安全隧道信道拓扑 -->
+            <div class="card spotlight status-card-detailed top-status-card">
+                <div class="card-header" style="margin-bottom: 0.75rem;">
+                    <h2>安全隧道信道拓扑</h2>
+                </div>
+                
+                <!-- Visual Network Map -->
+                <div class="network-map-container" id="network-map-container">
+                    <div class="network-node client-node active">
+                        <div class="node-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+                            </svg>
+                        </div>
+                        <span class="node-label">本地客户端</span>
+                        <span class="node-ip">127.0.0.1</span>
+                    </div>
+                    
+                    <div class="network-link to-vpn" id="link-to-vpn">
+                        <div class="link-pulse"></div>
+                    </div>
+                    
+                    <div class="network-node gateway-node" id="flow-gateway-node">
+                        <div class="node-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a3 3 0 013-3m0 0a3 3 0 003 3m10.5 0a3 3 0 003-3m-3 3a3 3 0 00-3-3m-12 3h13.5m-3.75 0h.008v.008h-.008V10.5zm-3 0h.008v.008h-.008V10.5m-3 0h.008v.008h-.008V10.5z" />
+                            </svg>
+                        </div>
+                        <span class="node-label" id="flow-vpn-label">VPN 节点</span>
+                        <span class="node-ip" id="flow-vpn-ip">-</span>
+                    </div>
+
+                    <div class="network-link to-internet" id="link-to-internet">
+                        <div class="link-pulse"></div>
+                    </div>
+
+                    <div class="network-node destination-node" id="flow-dest-node">
+                        <div class="node-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
+                            </svg>
+                        </div>
+                        <span class="node-label">公网目标</span>
+                        <span class="node-ip" id="flow-dest-ip">Internet</span>
+                    </div>
+                </div>
+                
+                <div class="status-details top-status-details">
+                    <div class="detail-row">
+                        <span class="label">出口 IP 地址</span>
+                        <span class="value mono text-cyan" id="active-ip">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">运营商 / ISP</span>
+                        <span class="value" id="active-isp">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">IP / ASN 归属</span>
+                        <span class="value mono" id="active-asn">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">IP 分布类型</span>
+                        <span class="value" id="active-ip-type">-</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">当前节点 ID</span>
+                        <span class="value mono text-truncate" id="active-node-id" style="max-width: 140px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">-</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- MAIN DASHBOARD CONTENT -->
@@ -181,59 +335,6 @@
             
             <!-- RIGHT AREA: CONTROL & CONFIGURATION (SIDEBAR) -->
             <aside class="sidebar-column">
-                <!-- CONNECTION CONTROL & SWITCH CARD -->
-                <div class="card spotlight settings-card">
-                    <div class="card-header">
-                        <h2>智能路由设置</h2>
-                    </div>
-                    <form id="settings-form" class="settings-form" onsubmit="saveSettings(event)">
-                        <div class="form-group">
-                            <label for="setting-routing-mode">网关选路模式</label>
-                            <div class="select-wrapper">
-                                <select id="setting-routing-mode" class="form-control" onchange="toggleSettingsVisibility()">
-                                    <option value="auto">自动选择最佳（推荐）</option>
-                                    <option value="fixed_ip">锁定固定 IP 节点</option>
-                                    <option value="fixed_region">锁定特定国家地区</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group" id="group-force-country" style="display: none;">
-                            <label for="setting-force-country">锁定国家/地区代码</label>
-                            <input type="text" id="setting-force-country" class="form-control text-uppercase" placeholder="例如: JP, US, KR">
-                        </div>
-
-                        <div class="form-group" id="group-fixed-node" style="display: none;">
-                            <label for="setting-fixed-node">锁定的目标节点 ID</label>
-                            <input type="text" id="setting-fixed-node" class="form-control mono" readonly placeholder="双击左侧列表节点行复制">
-                        </div>
-
-                        <div class="form-group">
-                            <label>
-                                <span>风控评分阈值上限</span>
-                                <span class="badge badge-primary" id="scamalytics-val">10</span>
-                            </label>
-                            <input type="range" id="setting-scamalytics" min="0" max="100" value="10" class="range-slider" oninput="document.getElementById('scamalytics-val').textContent=this.value">
-                            <p class="help-text">超过此分数的节点将自动隐藏不启用（10为优质住宅）</p>
-                        </div>
-
-                        <div class="form-divider"></div>
-
-                        <div class="form-group toggle-group">
-                            <div class="toggle-info">
-                                <label class="toggle-title">网关网络总闸</label>
-                                <p class="help-text">开启后，后台守护进程将自动维护 VPN 隧道并保持代理畅通</p>
-                            </div>
-                            <label class="switch">
-                                <input type="checkbox" id="setting-connection-enabled">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary btn-block btn-glow">保存并应用配置</button>
-                    </form>
-                </div>
-
                 <!-- USER CREDENTIALS CARD -->
                 <div class="card spotlight settings-card">
                     <div class="card-header">
@@ -254,76 +355,7 @@
                     </form>
                 </div>
 
-                <!-- ACTIVE CONNECTION DETAILED PARAMETERS WITH VISUAL TOPOLOGY -->
-                <div class="card spotlight status-card-detailed">
-                    <div class="card-header">
-                        <h2>安全隧道信道拓扑</h2>
-                    </div>
-                    
-                    <!-- Visual Network Map -->
-                    <div class="network-map-container" id="network-map-container">
-                        <div class="network-node client-node active">
-                            <div class="node-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
-                                </svg>
-                            </div>
-                            <span class="node-label">本地客户端</span>
-                            <span class="node-ip">127.0.0.1</span>
-                        </div>
-                        
-                        <div class="network-link to-vpn" id="link-to-vpn">
-                            <div class="link-pulse"></div>
-                        </div>
-                        
-                        <div class="network-node gateway-node" id="flow-gateway-node">
-                            <div class="node-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a3 3 0 013-3m0 0a3 3 0 003 3m10.5 0a3 3 0 003-3m-3 3a3 3 0 00-3-3m-12 3h13.5m-3.75 0h.008v.008h-.008V10.5zm-3 0h.008v.008h-.008V10.5m-3 0h.008v.008h-.008V10.5z" />
-                                </svg>
-                            </div>
-                            <span class="node-label" id="flow-vpn-label">VPN 节点</span>
-                            <span class="node-ip" id="flow-vpn-ip">-</span>
-                        </div>
 
-                        <div class="network-link to-internet" id="link-to-internet">
-                            <div class="link-pulse"></div>
-                        </div>
-
-                        <div class="network-node destination-node" id="flow-dest-node">
-                            <div class="node-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
-                                </svg>
-                            </div>
-                            <span class="node-label">公网目标</span>
-                            <span class="node-ip" id="flow-dest-ip">Internet</span>
-                        </div>
-                    </div>
-                    
-                    <div class="status-details">
-                        <div class="detail-row">
-                            <span class="label">出口 IP 地址</span>
-                            <span class="value mono text-cyan" id="active-ip">-</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="label">运营商 / ISP</span>
-                            <span class="value" id="active-isp">-</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="label">ASN 归属组织</span>
-                            <span class="value mono" id="active-asn">-</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="label">IP 分布类型</span>
-                            <span class="value" id="active-ip-type">-</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="label">当前使用节点 ID</span>
-                            <span class="value mono text-truncate" id="active-node-id">-</span>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- DIAGNOSTIC CONSOLE (TERMINAL WRAPPER) -->
                 <div class="card spotlight terminal-card-wrapper">

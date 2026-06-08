@@ -1,9 +1,24 @@
-// AetherGate Pro - Premium Frontend Controller
+// AetherGate Pro - Theme & Frontend Controller
+// Init theme from localStorage immediately to prevent visual flash
+(function() {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light") {
+        document.body.classList.add("light-theme");
+    }
+})();
+
+function toggleTheme() {
+    const isLight = document.body.classList.toggle("light-theme");
+    localStorage.setItem("theme", isLight ? "light" : "dark");
+}
+
 let appState = {
     nodes: [],
     settings: {},
     activeNodeId: "",
     isConnecting: false,
+    pendingConnectNodeId: null,   // which node's connect button is spinning
+    pendingDisconnect: false,     // disconnect button is spinning
     currentPage: 1,
     pageSize: 10,
     searchTerm: "",
@@ -24,8 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
     initSpotlightEffect();
     initSkeletonLoader();
     fetchNodesData();
-    // Start periodic polling every 3.5 seconds for snappier UI updates
-    setInterval(fetchNodesData, 3500);
+    // Poll every 2 seconds for snappier status updates
+    setInterval(fetchNodesData, 2000);
 });
 
 // 1. Mouse Spotlight Glow Effect
@@ -215,7 +230,32 @@ async function updateCredentials(event) {
     }
 }
 
-// 4. Render UI elements
+// 4a. Lightweight header-only update (called before full table re-render on connect)
+function updateHeaderStatus() {
+    const dot = document.getElementById("global-status-dot");
+    const text = document.getElementById("global-status-text");
+    const desc = document.getElementById("global-status-sub");
+    const btnDisconnect = document.getElementById("btn-quick-disconnect");
+
+    if (appState.pendingConnectNodeId || appState.isConnecting) {
+        if (dot) dot.className = "status-dot dot-connecting";
+        if (text) text.textContent = "正在建立连接...";
+        if (desc) desc.textContent = "正在切换 OpenVPN 隧道，请稍候";
+        if (btnDisconnect && !appState.pendingDisconnect) btnDisconnect.disabled = false;
+    } else if (appState.activeNodeId) {
+        if (dot) dot.className = "status-dot dot-online";
+        if (text) text.textContent = "已建立隔离隧道";
+        if (desc) desc.textContent = "网关运行正常，全部出口流量经隔离路由分发";
+        if (btnDisconnect && !appState.pendingDisconnect) btnDisconnect.disabled = false;
+    } else {
+        if (dot) dot.className = "status-dot dot-offline";
+        if (text) text.textContent = "未启动";
+        if (desc) desc.textContent = "网关未工作。开启右下角「总闸」即可启用自愈路由";
+        if (btnDisconnect && !appState.pendingDisconnect) btnDisconnect.disabled = true;
+    }
+}
+
+// 4b. Render UI elements
 function renderUIPanels() {
     // 1. Header Status Update
     const dot = document.getElementById("global-status-dot");
@@ -227,12 +267,12 @@ function renderUIPanels() {
         if (dot) dot.className = "status-dot dot-online";
         if (text) text.textContent = "已建立隔离隧道";
         if (desc) desc.textContent = "网关运行正常，全部出口流量经隔离路由分发";
-        if (btnDisconnect) btnDisconnect.disabled = false;
+        if (btnDisconnect && !appState.pendingDisconnect) btnDisconnect.disabled = false;
     } else if (appState.isConnecting) {
         if (dot) dot.className = "status-dot dot-connecting";
         if (text) text.textContent = "正在建立连接...";
         if (desc) desc.textContent = appState.settings.last_check_message || "正在初始化 OpenVPN 安全隧道";
-        if (btnDisconnect) btnDisconnect.disabled = false;
+        if (btnDisconnect && !appState.pendingDisconnect) btnDisconnect.disabled = false;
     } else {
         if (dot) dot.className = "status-dot dot-offline";
         if (text) text.textContent = "未启动";
@@ -429,10 +469,15 @@ function renderNodesTable() {
         
         // Connect button behavior
         let connButton = "";
-        if (isCurrentActive) {
-            connButton = `<button class="btn btn-secondary btn-sm" disabled>工作节点</button>`;
+        if (isCurrentActive && !appState.isConnecting) {
+            // Already connected to this node
+            connButton = `<button class="btn btn-success btn-sm" disabled>✓ 已接入</button>`;
+        } else if (n.id === appState.pendingConnectNodeId || (isCurrentActive && appState.isConnecting)) {
+            // This specific node is currently being connected
+            connButton = `<button class="btn btn-primary btn-sm btn-loading" disabled><span class="btn-spinner"></span> 接入中...</button>`;
         } else {
-            const isDisabled = appState.isConnecting || !appState.settings.connection_enabled;
+            // Other nodes are disabled while any connect is pending or active
+            const isDisabled = !!appState.pendingConnectNodeId || appState.isConnecting;
             connButton = `<button class="btn btn-primary btn-sm" ${isDisabled ? 'disabled' : ''} onclick="connectNode(event, ${htmlEscape(nodeIdArg)})">接入</button>`;
         }
         
@@ -507,51 +552,57 @@ function lockNodeId(nodeId) {
 
 async function connectNode(event, nodeId) {
     if (event) event.stopPropagation();
-    if (appState.isConnecting) return;
-    
-    let btnElement = null;
-    if (event && event.target && event.target.tagName === "BUTTON") {
-        btnElement = event.target;
-        btnElement.disabled = true;
-        btnElement.innerHTML = `接入中...`;
-    }
-    
+    // Prevent double-triggering while a connection is pending
+    if (appState.pendingConnectNodeId) return;
+
+    // ▸ Immediately show spinner on this specific node's button
+    appState.pendingConnectNodeId = nodeId;
     appState.isConnecting = true;
-    renderUIPanels();
-    
-    addDiagnosticLine(`[控制面板]: 发起强制切换到节点=${nodeId.substring(0, 12)}...`);
+    renderNodesTable();   // Only re-render table so spinner appears instantly
+    updateHeaderStatus(); // Update header status dot
+
+    addDiagnosticLine(`[控制面板]: 正在切换到节点 ${nodeId.substring(0, 15)}...`);
     try {
-        const res = await fetch(`${apiPrefix}/api/connect`, {
+        await fetch(`${apiPrefix}/api/connect`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ node_id: nodeId })
         });
+        // Clear pending state then refresh from server
+        appState.pendingConnectNodeId = null;
         await fetchNodesData();
     } catch (err) {
         addDiagnosticLine(`[切换连接失败]: ${err}`);
         appState.isConnecting = false;
-        renderNodesTable();
+        appState.pendingConnectNodeId = null;
         renderUIPanels();
     }
 }
 
+// SVG for the disconnect button (kept as constant to avoid re-reading the DOM)
+const DISCONNECT_BTN_CONTENT = `<svg viewBox="0 0 20 20" fill="currentColor" class="icon"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 2.839A6.978 6.978 0 0110 2c3.866 0 7 3.134 7 7a6.978 6.978 0 01-.839 2H10V2.839z" clip-rule="evenodd" /></svg> 断开隧道`;
+
 async function disconnectNode() {
+    if (appState.pendingDisconnect) return;
     addDiagnosticLine("[控制面板]: 手动断开当前网络隧道连接");
-    
+
+    appState.pendingDisconnect = true;
     const btnDisconnect = document.getElementById("btn-quick-disconnect");
     if (btnDisconnect) {
         btnDisconnect.disabled = true;
-        btnDisconnect.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 正在断开...`;
+        btnDisconnect.innerHTML = `<span class="btn-spinner"></span> 正在断开...`;
     }
-    
+
     try {
         await fetch(`${apiPrefix}/api/disconnect`, { method: "POST" });
         await fetchNodesData();
     } catch (err) {
         addDiagnosticLine(`[断开隧道失败]: ${err}`);
     } finally {
+        appState.pendingDisconnect = false;
         if (btnDisconnect) {
-            btnDisconnect.innerHTML = `<i class="fas fa-power-off"></i> 断开连接`;
+            // Restore the button; renderUIPanels will handle enabled/disabled state
+            btnDisconnect.innerHTML = DISCONNECT_BTN_CONTENT;
         }
     }
 }

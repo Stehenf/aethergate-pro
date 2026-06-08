@@ -671,10 +671,67 @@ input:checked + .slider:before {
     border-radius: 10px;
 }
 
+/* Immediate tactile press feedback on ALL buttons — eliminates "no response" perception */
+.btn:active:not(:disabled) {
+    transform: scale(0.94) !important;
+    transition: transform 0.08s ease !important;
+}
+/* Disabled button shared style */
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none !important;
+}
+/* Allow the success/loading states to look distinct even when disabled */
+.btn-success:disabled,
+.btn.btn-loading:disabled {
+    opacity: 1;
+    pointer-events: none;
+}
+
+/* ✓ Connected/已接入 button */
+.btn-success {
+    background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+    color: white;
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.28);
+    cursor: default;
+}
+
+/* Spinning state button */
+.btn-loading {
+    cursor: wait;
+}
+
+/* Pure-CSS loading spinner (no Bootstrap/FontAwesome required) */
+.btn-spinner {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .icon {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
+}
+
+/* Table actions cell — side-by-side buttons with proper spacing */
+.actions-cell {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: nowrap;
 }
 
 /* DIAGNOSTIC WINDOW */
@@ -1144,5 +1201,185 @@ input:checked + .slider:before {
     border: none;
     border-radius: 0;
     height: 190px;
+}
+
+/* ==========================================================================
+   THEME SWITCHER & LIGHT THEME STYLING
+   ========================================================================== */
+
+/* Light theme color variables override */
+body.light-theme {
+    --bg-color: #f1f5f9;
+    --card-bg: rgba(255, 255, 255, 0.75);
+    --card-bg-hover: rgba(255, 255, 255, 0.9);
+    --border-color: rgba(15, 23, 42, 0.08);
+    --border-highlight: rgba(139, 92, 246, 0.25);
+    
+    /* Neons & Accents */
+    --primary: #7c3aed;
+    --primary-glow: rgba(124, 58, 237, 0.15);
+    --primary-gradient: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    
+    --cyan: #0891b2;
+    --cyan-glow: rgba(8, 145, 178, 0.15);
+    
+    --magenta: #db2777;
+    --magenta-gradient: linear-gradient(135deg, #db2777 0%, #be185d 100%);
+    
+    --success: #059669;
+    --success-gradient: linear-gradient(135deg, #10b981 0%, #047857 100%);
+    
+    --danger: #e11d48;
+    --danger-gradient: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+    
+    --warning: #d97706;
+    
+    /* Text colors */
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+}
+
+/* Light Theme Body Background overrides */
+body.light-theme {
+    background-image: 
+        radial-gradient(circle at 50% -20%, rgba(124, 58, 237, 0.08) 0%, transparent 60%),
+        radial-gradient(circle at 100% 100%, rgba(56, 189, 248, 0.05) 0%, transparent 50%);
+}
+
+body.light-theme .glow-orb {
+    opacity: 0.15;
+}
+
+/* Light theme specific component overrides */
+body.light-theme * {
+    scrollbar-color: rgba(15, 23, 42, 0.1) transparent;
+}
+body.light-theme ::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.08);
+}
+body.light-theme ::-webkit-scrollbar-thumb:hover {
+    background: rgba(15, 23, 42, 0.18);
+}
+
+body.light-theme .form-control {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(15, 23, 42, 0.12);
+    color: var(--text-primary);
+}
+body.light-theme .form-control:focus {
+    background: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
+}
+
+body.light-theme .h-badge {
+    background: rgba(15, 23, 42, 0.04);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+
+body.light-theme .node-table th {
+    background: rgba(15, 23, 42, 0.02);
+    color: var(--text-secondary);
+}
+
+body.light-theme .node-table tr:hover {
+    background: rgba(15, 23, 42, 0.015);
+}
+
+body.light-theme .node-table tr.active-row {
+    background: rgba(5, 150, 105, 0.06);
+    border-color: rgba(5, 150, 105, 0.2);
+}
+
+body.light-theme .diagnostic-box {
+    background: #090e1a; /* Keep terminal black for diagnostic feeling */
+    color: #a7f3d0;
+}
+
+body.light-theme .btn-secondary {
+    background: rgba(15, 23, 42, 0.05);
+    color: var(--text-primary);
+}
+body.light-theme .btn-secondary:hover {
+    background: rgba(15, 23, 42, 0.09);
+}
+
+/* Theme Toggle button show/hide logic for icons */
+body.light-theme #theme-moon-icon { display: none !important; }
+body.light-theme #theme-sun-icon { display: inline-block !important; }
+body:not(.light-theme) #theme-moon-icon { display: inline-block !important; }
+body:not(.light-theme) #theme-sun-icon { display: none !important; }
+
+/* ==========================================================================
+   TOP DOUBLE CARD LAYOUT (SETTINGS + TOPOLOGY)
+   ========================================================================== */
+.top-dashboard-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1.25fr;
+    gap: 2.5rem;
+    align-items: stretch;
+}
+
+@media (max-width: 1200px) {
+    .top-dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+}
+
+.top-settings-card {
+    padding: 2rem 2.25rem !important;
+}
+
+.settings-grid-form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+
+@media (min-width: 640px) {
+    .settings-grid-form {
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        align-items: start;
+    }
+    .settings-grid-form .submit-group {
+        grid-column: span 2;
+    }
+}
+
+.top-status-card {
+    padding: 2rem 2.25rem !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.top-status-card .network-map-container {
+    margin: 1.25rem 0 !important;
+}
+
+.top-status-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-top: auto;
+}
+
+.top-status-details .detail-row {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 0.75rem 1rem !important;
+}
+
+body.light-theme .top-status-details .detail-row {
+    background: rgba(15, 23, 42, 0.02);
+    border-color: rgba(15, 23, 42, 0.06);
 }
 
