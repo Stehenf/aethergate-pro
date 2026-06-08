@@ -72,6 +72,7 @@ class OpenVPNRunner:
 
         # Build command: [ip, netns, exec, vpn_ns] + [openvpn, --config, file]
         prefix = self.netns_mgr.get_ns_prefix()
+        core_dir = Path(__file__).resolve().parent
         cmd = prefix + [
             "openvpn",
             "--config", str(self.config_file),
@@ -79,8 +80,8 @@ class OpenVPNRunner:
             "--data-ciphers", "AES-128-CBC:AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305",
             "--script-security", "2",
             "--tls-verify", "/bin/true",
-            "--up", "/opt/vpngate-pro/core/dns_up.sh",
-            "--down", "/opt/vpngate-pro/core/dns_down.sh",
+            "--up", str(core_dir / "dns_up.sh"),
+            "--down", str(core_dir / "dns_down.sh"),
         ]
         
         print(f"[OpenVPN] Launching OpenVPN for node {node_id}: {' '.join(cmd)}", flush=True)

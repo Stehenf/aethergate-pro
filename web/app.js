@@ -248,7 +248,7 @@ function renderUIPanels() {
         
         const loc = activeNode.location || activeNode.country || "-";
         const flag = getFlagEmoji(activeNode.country);
-        document.getElementById("active-location").innerHTML = `<span class="flag-icon">${flag}</span> ${loc}`;
+        document.getElementById("active-location").innerHTML = `<span class="flag-icon">${htmlEscape(flag)}</span> ${htmlEscape(loc)}`;
         
         document.getElementById("active-latency").textContent = (activeNode.latency_ms && activeNode.latency_ms < 99999) ? `${activeNode.latency_ms} ms` : "正在测速";
         document.getElementById("active-ip-type").innerHTML = `<span class="type-badge">${translateIpType(activeNode.ip_type)}</span>`;
@@ -329,7 +329,11 @@ function addDiagnosticLine(text) {
     const timeStr = new Date().toLocaleTimeString("zh-CN", { hour12: false });
     const line = document.createElement("div");
     line.className = "log-line";
-    line.innerHTML = `<span class="log-time">[${timeStr}]</span> ${text}`;
+    const timeEl = document.createElement("span");
+    timeEl.className = "log-time";
+    timeEl.textContent = `[${timeStr}]`;
+    line.appendChild(timeEl);
+    line.appendChild(document.createTextNode(` ${text}`));
     
     box.appendChild(line);
     // Auto Scroll to bottom
@@ -399,15 +403,18 @@ function renderNodesTable() {
     body.innerHTML = pageNodes.map(n => {
         const isCurrentActive = n.id === appState.activeNodeId;
         const rowClass = isCurrentActive ? 'class="active-row"' : '';
-        const badgeClass = isCurrentActive ? 'status-available' : `status-${n.probe_status || 'not_checked'}`;
+        const probeStatus = normalizeProbeStatus(n.probe_status);
+        const badgeClass = isCurrentActive ? 'status-available' : `status-${probeStatus}`;
         const badgeText = isCurrentActive ? '已连接' : translateStatus(n.probe_status);
+        const nodeIdArg = jsStringLiteral(n.id || "");
         
         // Latency formatting
         let latencyText = "-";
-        if (n.latency_ms && n.latency_ms < 99999) {
-            latencyText = `<span class="text-success" style="font-weight:700;">${n.latency_ms} ms</span>`;
+        const latency = Number(n.latency_ms);
+        if (Number.isFinite(latency) && latency < 99999) {
+            latencyText = `<span class="text-success" style="font-weight:700;">${latency} ms</span>`;
         } else if (n.ping) {
-            latencyText = `<span class="text-secondary" style="font-size:11px;">${n.ping} ms (原始)</span>`;
+            latencyText = `<span class="text-secondary" style="font-size:11px;">${htmlEscape(n.ping)} ms (原始)</span>`;
         }
         
         // Scamalytics rendering
@@ -426,21 +433,23 @@ function renderNodesTable() {
             connButton = `<button class="btn btn-secondary btn-sm" disabled>工作节点</button>`;
         } else {
             const isDisabled = appState.isConnecting || !appState.settings.connection_enabled;
-            connButton = `<button class="btn btn-primary btn-sm" ${isDisabled ? 'disabled' : ''} onclick="connectNode(event, '${n.id}')">接入</button>`;
+            connButton = `<button class="btn btn-primary btn-sm" ${isDisabled ? 'disabled' : ''} onclick="connectNode(event, ${nodeIdArg})">接入</button>`;
         }
         
         // Test button behavior
         const isTesting = appState.testingNodeIds.has(n.id);
-        const testButton = `<button class="btn btn-secondary btn-sm" ${isTesting ? 'disabled' : ''} onclick="testNode(event, this, '${n.id}')">${isTesting ? '正在探测' : '测速'}</button>`;
+        const testButton = `<button class="btn btn-secondary btn-sm" ${isTesting ? 'disabled' : ''} onclick="testNode(event, this, ${nodeIdArg})">${isTesting ? '正在探测' : '测速'}</button>`;
         
         const flag = getFlagEmoji(n.country);
+        const location = htmlEscape(n.location || n.country || "-");
+        const owner = htmlEscape(n.owner || n.as_name || "-");
         
-        return `<tr ${rowClass} ondblclick="lockNodeId('${n.id}')" title="双击直接锁定此 IP">
+        return `<tr ${rowClass} ondblclick="lockNodeId(${nodeIdArg})" title="双击直接锁定此 IP">
             <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
             <td>${latencyText}</td>
-            <td class="mono">${n.ip}</td>
-            <td><span class="flag-icon">${flag}</span> ${n.location || n.country || "-"}</td>
-            <td class="mono" style="font-size: 11px; color: var(--text-secondary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${n.owner || n.as_name || "-"}</td>
+            <td class="mono">${htmlEscape(n.ip || "-")}</td>
+            <td><span class="flag-icon">${htmlEscape(flag)}</span> ${location}</td>
+            <td class="mono" title="${owner}" style="font-size: 11px; color: var(--text-secondary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${owner}</td>
             <td>${scoreTag}</td>
             <td><span class="type-badge">${translateIpType(n.ip_type)}</span></td>
             <td>
@@ -556,6 +565,10 @@ function translateStatus(status) {
     return dict[status] || "待检测";
 }
 
+function normalizeProbeStatus(status) {
+    return ["available", "unavailable", "not_checked"].includes(status) ? status : "not_checked";
+}
+
 function translateIpType(type) {
     const dict = { "residential": "住宅", "mobile": "移动", "hosting": "机房", "datacenter": "机房", "proxy": "代理", "untested": "待检测", "unknown": "未知" };
     return dict[type] || "待检测";
@@ -570,7 +583,7 @@ function translateRisk(score) {
 
 // Flag Emoji mapping helper
 function getFlagEmoji(countryCode) {
-    if (!countryCode) return "🌐";
+    if (!/^[A-Za-z]{2}$/.test(countryCode || "")) return "🌐";
     const codePoints = countryCode
         .toUpperCase()
         .split('')
@@ -580,6 +593,22 @@ function getFlagEmoji(countryCode) {
     } catch (e) {
         return "🌐";
     }
+}
+
+function htmlEscape(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+    }[char]));
+}
+
+function jsStringLiteral(value) {
+    return JSON.stringify(String(value ?? ""))
+        .replace(/</g, "\\u003c")
+        .replace(/>/g, "\\u003e");
 }
 
 // Update visual connection topology mapping based on tunnel state

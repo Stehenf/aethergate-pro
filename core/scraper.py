@@ -7,6 +7,7 @@ import re
 import asyncio
 import urllib.request
 import urllib.parse
+import tempfile
 from pathlib import Path
 
 class CandidateScraper:
@@ -34,10 +35,7 @@ class CandidateScraper:
 
     def save_cache(self, cache: dict):
         """Save IP Cache file synchronously."""
-        try:
-            self.cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        self.write_json_atomic(self.cache_file, cache)
 
     def load_nodes_sync(self) -> list:
         """Load nodes.json synchronously."""
@@ -50,10 +48,25 @@ class CandidateScraper:
 
     def save_nodes_sync(self, nodes: list):
         """Save nodes.json synchronously."""
+        self.write_json_atomic(self.nodes_file, nodes)
+
+    def write_json_atomic(self, path: Path, payload):
+        """Write JSON via atomic replace so interrupted writes do not corrupt state."""
         try:
-            self.nodes_file.write_text(json.dumps(nodes, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                delete=False,
+            ) as tmp:
+                json.dump(payload, tmp, ensure_ascii=False, indent=2)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+                tmp_path = Path(tmp.name)
+            tmp_path.replace(path)
+        except Exception as e:
+            print(f"[Scraper] Failed to save {path.name}: {e}", flush=True)
 
     def _http_request_blocking(self, url, data=None, headers=None, method=None, timeout=10) -> bytes:
         """Synchronous HTTP Request to be run in asyncio thread pool."""

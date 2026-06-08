@@ -89,10 +89,10 @@ You should see output indicating the service is `active (running)`.
 ### 1. Web Dashboard
 After successful installation, the Web Dashboard will be exposed at:
 * **URL**: `http://<YOUR_VPS_IP>:8787/<SECRET_PATH>/`
-  *(Note: The `<SECRET_PATH>` defaults to `wdj91VRBdqYx`. You can customize this in the config file).*
+  *(Note: The `<SECRET_PATH>` is generated on first startup. You can read or customize it in the config file).*
 * **Default Credentials**:
   * **Username**: `admin`
-  * **Password**: *A random password printed during the first service execution* (or migrated from your old installation).
+  * **Password**: A random password stored in `/opt/vpngate-pro/vpngate_data/config.json` on first startup (or migrated from your old installation).
 
 ### 2. Connecting to Proxy
 Set up your local browser (e.g., SwitchyOmega) or system client to use the Mixed Proxy:

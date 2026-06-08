@@ -6,6 +6,8 @@ import argparse
 import asyncio
 import urllib.request
 import signal
+import secrets
+import tempfile
 from pathlib import Path
 
 # Add project root to path for local imports
@@ -20,8 +22,8 @@ from core.web import AsyncWebServer
 # Global configurations
 DEFAULT_CONFIG = {
     "username": "admin",
-    "password": "Mm" + str(int(time.time()))[-6:], # Generate default password
-    "secret_path": "wdj91VRBdqYx",
+    "password": secrets.token_urlsafe(18),
+    "secret_path": secrets.token_urlsafe(9),
     "ui_host": "0.0.0.0",
     "ui_port": 8787,
     "proxy_host": "127.0.0.1",
@@ -31,6 +33,22 @@ DEFAULT_CONFIG = {
     "connection_enabled": False,
     "fixed_node_id": "",
     "scamalytics_threshold": 10
+}
+
+ALLOWED_ROUTING_MODES = {"auto", "fixed_ip", "fixed_region"}
+CONFIG_TYPES = {
+    "username": str,
+    "password": str,
+    "secret_path": str,
+    "ui_host": str,
+    "ui_port": int,
+    "proxy_host": str,
+    "proxy_port": int,
+    "routing_mode": str,
+    "force_country": str,
+    "connection_enabled": bool,
+    "fixed_node_id": str,
+    "scamalytics_threshold": int,
 }
 
 def get_data_dir() -> Path:
@@ -49,6 +67,7 @@ class VPNGateProManager:
         self.data_dir = get_data_dir()
         self.config_file = self.data_dir / "config.json"
         self.nodes_file = self.data_dir / "nodes.json"
+        self.created_config = False
         
         self.config = self.load_config()
         
@@ -76,24 +95,83 @@ class VPNGateProManager:
     def load_config(self) -> dict:
         """Load config file, or write default config if missing."""
         cfg = DEFAULT_CONFIG.copy()
+        loaded = {}
         if self.config_file.exists():
             try:
                 loaded = json.loads(self.config_file.read_text(encoding="utf-8"))
-                cfg.update(loaded)
-            except Exception:
-                pass
+                if isinstance(loaded, dict):
+                    cfg.update(loaded)
+                else:
+                    loaded = {}
+            except Exception as e:
+                print(f"[Config] Failed to read config, using defaults: {e}", flush=True)
+                loaded = {}
         else:
-            self.save_config_sync(cfg)
-        return cfg
+            self.created_config = True
+
+        normalized = self.normalize_config(cfg)
+        if self.created_config or any(loaded.get(k) != normalized[k] for k in CONFIG_TYPES):
+            self.save_config_sync(normalized)
+            if self.created_config:
+                try:
+                    os.chmod(self.config_file, 0o600)
+                except Exception:
+                    pass
+        return normalized
+
+    def normalize_config(self, cfg: dict) -> dict:
+        """Keep persisted settings within the supported schema and ranges."""
+        normalized = DEFAULT_CONFIG.copy()
+        for key, expected_type in CONFIG_TYPES.items():
+            if key not in cfg:
+                continue
+            value = cfg[key]
+            if expected_type is bool:
+                if isinstance(value, bool):
+                    normalized[key] = value
+                elif isinstance(value, str):
+                    normalized[key] = value.strip().lower() in {"1", "true", "yes", "on"}
+                else:
+                    normalized[key] = bool(value)
+            elif expected_type is int:
+                try:
+                    normalized[key] = int(value)
+                except (TypeError, ValueError):
+                    continue
+            elif isinstance(value, expected_type):
+                normalized[key] = value
+
+        normalized["routing_mode"] = (
+            normalized["routing_mode"]
+            if normalized["routing_mode"] in ALLOWED_ROUTING_MODES
+            else "auto"
+        )
+        normalized["ui_port"] = min(max(normalized["ui_port"], 1), 65535)
+        normalized["proxy_port"] = min(max(normalized["proxy_port"], 1), 65535)
+        normalized["scamalytics_threshold"] = min(max(normalized["scamalytics_threshold"], 0), 100)
+        normalized["force_country"] = normalized["force_country"].strip().upper()[:2]
+        normalized["username"] = normalized["username"].strip() or DEFAULT_CONFIG["username"]
+        normalized["secret_path"] = normalized["secret_path"].strip().strip("/") or DEFAULT_CONFIG["secret_path"]
+        return normalized
 
     def save_config_sync(self, cfg):
-        try:
-            self.config_file.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        cfg = self.normalize_config(cfg)
+        self.config_file.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(cfg, ensure_ascii=False, indent=2)
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=self.config_file.parent,
+            delete=False,
+        ) as tmp:
+            tmp.write(payload)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            tmp_path = Path(tmp.name)
+        tmp_path.replace(self.config_file)
 
     async def save_config(self, cfg):
-        self.config = cfg
+        self.config = self.normalize_config(cfg)
         await asyncio.to_thread(self.save_config_sync, cfg)
 
     def get_state_data(self) -> dict:
@@ -158,7 +236,7 @@ class VPNGateProManager:
     async def update_settings(self, payload):
         """Update and persist settings."""
         cfg = self.config.copy()
-        cfg.update(payload)
+        cfg.update({k: v for k, v in payload.items() if k in CONFIG_TYPES})
         await self.save_config(cfg)
         print(f"[Settings] Configurations updated: {payload}", flush=True)
 

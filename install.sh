@@ -85,6 +85,10 @@ except Exception as e:
 "
 fi
 
+if [ -f "$NEW_CONFIG" ]; then
+    chmod 600 "$NEW_CONFIG"
+fi
+
 # 5. Create Systemd Service File
 echo "[4/6] Configuring systemd service..."
 cat <<EOF > /etc/systemd/system/vpngate-pro.service
@@ -123,6 +127,7 @@ systemctl status vpngate-pro.service --no-pager
 
 echo "============================================="
 echo "Deployment successful!"
-echo "UI: http://<VPS_IP>:8787/wdj91VRBdqYx/"
+echo "Config: ${TARGET_DIR}/vpngate_data/config.json"
+echo "UI: http://<VPS_IP>:8787/<secret_path>/"
 echo "Proxy (SOCKS5/HTTP): <VPS_IP>:7928"
 echo "============================================="

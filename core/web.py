@@ -1,10 +1,26 @@
 import os
 import json
 import time
-import uuid
 import mimetypes
 import asyncio
+import posixpath
+import secrets
 from pathlib import Path
+
+MAX_HEADER_BYTES = 32 * 1024
+MAX_BODY_BYTES = 256 * 1024
+HEADER_TIMEOUT = 5
+BODY_TIMEOUT = 10
+STATUS_REASONS = {
+    200: "OK",
+    302: "Found",
+    400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
+    404: "Not Found",
+    413: "Payload Too Large",
+    500: "Internal Server Error",
+}
 
 class AsyncWebServer:
     def __init__(self, manager, host="0.0.0.0", port=8787):
@@ -14,9 +30,7 @@ class AsyncWebServer:
         self.server = None
         self.sessions = {} # token -> expiry_timestamp
         
-        self.web_dir = Path("/Users/jfg/Desktop/vpngate-pro/web")
-        if not self.web_dir.exists():
-            self.web_dir = Path(__file__).parent.parent / "web"
+        self.web_dir = Path(__file__).resolve().parent.parent / "web"
 
     async def start(self):
         self.server = await asyncio.start_server(
@@ -35,22 +49,28 @@ class AsyncWebServer:
             # Read HTTP request header
             header_data = b""
             while True:
-                chunk = await reader.read(4096)
+                chunk = await asyncio.wait_for(reader.read(4096), timeout=HEADER_TIMEOUT)
                 if not chunk:
                     break
                 header_data += chunk
+                if len(header_data) > MAX_HEADER_BYTES:
+                    self.send_json(writer, {"error": "Request header too large"}, 413)
+                    return
                 if b"\r\n\r\n" in header_data:
                     break
 
             if not header_data:
-                writer.close()
+                await self.close_writer(writer)
+                return
+            if b"\r\n\r\n" not in header_data:
+                self.send_json(writer, {"error": "Malformed request"}, 400)
                 return
 
             header_part, body_part = header_data.split(b"\r\n\r\n", 1)
             lines = header_part.decode("utf-8", errors="replace").split("\r\n")
             request_line = lines[0].split()
             if len(request_line) < 3:
-                writer.close()
+                self.send_json(writer, {"error": "Malformed request"}, 400)
                 return
 
             method, path, _ = request_line
@@ -61,10 +81,20 @@ class AsyncWebServer:
                     headers[k.strip().lower()] = v.strip()
 
             # Read remaining body if Content-Length specified
-            content_length = int(headers.get("content-length", 0))
+            try:
+                content_length = int(headers.get("content-length", 0))
+            except ValueError:
+                self.send_json(writer, {"error": "Invalid Content-Length"}, 400)
+                return
+            if content_length < 0 or content_length > MAX_BODY_BYTES:
+                self.send_json(writer, {"error": "Request body too large"}, 413)
+                return
             body = body_part
             if len(body) < content_length:
-                body += await reader.readexactly(content_length - len(body))
+                body += await asyncio.wait_for(
+                    reader.readexactly(content_length - len(body)),
+                    timeout=BODY_TIMEOUT
+                )
 
             # Parse cookies
             cookie_header = headers.get("cookie", "")
@@ -80,7 +110,7 @@ class AsyncWebServer:
         except Exception as e:
             print(f"[Web] Error handling request: {e}", flush=True)
             try:
-                writer.close()
+                await self.close_writer(writer)
             except Exception:
                 pass
 
@@ -106,7 +136,7 @@ class AsyncWebServer:
 
         if prefix and clean_path.startswith(f"{prefix}/web/"):
             # Strip prefix and serve static web assets
-            relative_path = clean_path.replace(f"{prefix}/web/", "")
+            relative_path = clean_path.replace(f"{prefix}/web/", "", 1)
             await self.serve_static_file(writer, relative_path)
             return
 
@@ -114,7 +144,7 @@ class AsyncWebServer:
         api_path = clean_path
         if prefix:
             if clean_path.startswith(f"{prefix}/api/"):
-                api_path = clean_path.replace(prefix, "")
+                api_path = clean_path.replace(prefix, "", 1)
             else:
                 self.send_json(writer, {"error": "Unauthorized"}, 401)
                 return
@@ -157,12 +187,15 @@ class AsyncWebServer:
             return True
             
         token = cookies.get("session")
-        if not token or token not in self.sessions:
+        if not token:
+            return False
+        matched_token = next((saved for saved in self.sessions if secrets.compare_digest(saved, token)), None)
+        if not matched_token:
             return False
         
         # Check expiry
-        if self.sessions[token] < time.time():
-            del self.sessions[token]
+        if self.sessions[matched_token] < time.time():
+            del self.sessions[matched_token]
             return False
             
         return True
@@ -174,11 +207,13 @@ class AsyncWebServer:
             await self.serve_static_file(writer, "login.html")
 
     async def serve_static_file(self, writer, filename):
-        file_path = self.web_dir / filename
+        normalized = posixpath.normpath("/" + filename).lstrip("/")
+        file_path = self.web_dir / normalized
         # Security check to prevent directory traversal
         try:
             resolved_path = file_path.resolve()
-            if not str(resolved_path).startswith(str(self.web_dir.resolve())):
+            web_root = self.web_dir.resolve()
+            if resolved_path != web_root and web_root not in resolved_path.parents:
                 self.send_json(writer, {"error": "Forbidden"}, 403)
                 return
         except Exception:
@@ -209,9 +244,16 @@ class AsyncWebServer:
             cfg_user = self.manager.config.get("username", "admin")
             cfg_pass = self.manager.config.get("password", "")
             
-            if username == cfg_user and password == cfg_pass:
+            if (
+                isinstance(username, str)
+                and isinstance(password, str)
+                and secrets.compare_digest(username, cfg_user)
+                and secrets.compare_digest(password, cfg_pass)
+            ):
                 # Generate session token
-                token = str(uuid.uuid4())
+                token = secrets.token_urlsafe(32)
+                now = time.time()
+                self.sessions = {k: v for k, v in self.sessions.items() if v > now}
                 self.sessions[token] = time.time() + 24 * 3600 # 24 hours expiry
                 
                 cookie_header = f"session={token}; Path=/; HttpOnly; SameSite=Lax"
@@ -294,10 +336,12 @@ class AsyncWebServer:
             self.send_json(writer, {"error": str(e)}, 400)
 
     def send_bytes(self, writer, body, content_type, status=200, headers=None):
-        res = f"HTTP/1.1 {status} OK\r\n"
+        reason = STATUS_REASONS.get(status, "OK")
+        res = f"HTTP/1.1 {status} {reason}\r\n"
         res += f"Content-Type: {content_type}\r\n"
         res += f"Content-Length: {len(body)}\r\n"
         res += "Cache-Control: no-store, no-cache, must-revalidate\r\n"
+        res += "X-Content-Type-Options: nosniff\r\n"
         if headers:
             for k, v in headers.items():
                 res += f"{k}: {v}\r\n"
@@ -316,6 +360,10 @@ class AsyncWebServer:
             await writer.wait_closed()
         except Exception:
             pass
+
+    async def close_writer(self, writer):
+        writer.close()
+        await writer.wait_closed()
 
     def send_json(self, writer, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")

@@ -2,6 +2,11 @@ import asyncio
 import socket
 import urllib.parse
 
+CONNECT_TIMEOUT = 10
+READ_TIMEOUT = 15
+MAX_HTTP_LINE_BYTES = 8192
+MAX_HTTP_HEADER_BYTES = 64 * 1024
+
 class MixedProxyServer:
     def __init__(self, host="0.0.0.0", port=7928):
         self.host = host
@@ -27,7 +32,7 @@ class MixedProxyServer:
         """Sniff the first byte and dispatch to SOCKS5 or HTTP handler."""
         try:
             # Read first byte to determine protocol
-            first_byte = await reader.readexactly(1)
+            first_byte = await asyncio.wait_for(reader.readexactly(1), timeout=READ_TIMEOUT)
             if not first_byte:
                 writer.close()
                 return
@@ -47,16 +52,16 @@ class MixedProxyServer:
         """Handle SOCKS5 handshake and connection tunneling."""
         try:
             # 1. Read greeting methods
-            header = await reader.readexactly(1)
+            header = await asyncio.wait_for(reader.readexactly(1), timeout=READ_TIMEOUT)
             nmethods = header[0]
-            methods = await reader.readexactly(nmethods)
+            await asyncio.wait_for(reader.readexactly(nmethods), timeout=READ_TIMEOUT)
             
             # Respond: SOCKS5, No Authentication
             writer.write(b'\x05\x00')
             await writer.drain()
 
             # 2. Read request: VER, CMD, RSV, ATYP
-            req_header = await reader.readexactly(4)
+            req_header = await asyncio.wait_for(reader.readexactly(4), timeout=READ_TIMEOUT)
             cmd = req_header[1]
             atyp = req_header[3]
 
@@ -68,15 +73,15 @@ class MixedProxyServer:
 
             # Read target address
             if atyp == 0x01: # IPv4
-                addr_bytes = await reader.readexactly(4)
+                addr_bytes = await asyncio.wait_for(reader.readexactly(4), timeout=READ_TIMEOUT)
                 target_host = socket.inet_ntoa(addr_bytes)
             elif atyp == 0x03: # Domain name
-                len_byte = await reader.readexactly(1)
+                len_byte = await asyncio.wait_for(reader.readexactly(1), timeout=READ_TIMEOUT)
                 domain_len = len_byte[0]
-                domain_bytes = await reader.readexactly(domain_len)
+                domain_bytes = await asyncio.wait_for(reader.readexactly(domain_len), timeout=READ_TIMEOUT)
                 target_host = domain_bytes.decode('utf-8')
             elif atyp == 0x04: # IPv6
-                addr_bytes = await reader.readexactly(16)
+                addr_bytes = await asyncio.wait_for(reader.readexactly(16), timeout=READ_TIMEOUT)
                 target_host = socket.inet_ntop(socket.AF_INET6, addr_bytes)
             else:
                 writer.write(b'\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00') # Address type not supported
@@ -85,11 +90,19 @@ class MixedProxyServer:
                 return
 
             # Read target port
-            port_bytes = await reader.readexactly(2)
+            port_bytes = await asyncio.wait_for(reader.readexactly(2), timeout=READ_TIMEOUT)
             target_port = int.from_bytes(port_bytes, 'big')
+            if not self.is_valid_port(target_port):
+                writer.write(b'\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00')
+                await writer.drain()
+                writer.close()
+                return
 
             try:
-                target_reader, target_writer = await asyncio.open_connection(target_host, target_port)
+                target_reader, target_writer = await asyncio.wait_for(
+                    asyncio.open_connection(target_host, target_port),
+                    timeout=CONNECT_TIMEOUT
+                )
             except Exception as e:
                 print(f"[Proxy Debug] SOCKS5 Connect to {target_host}:{target_port} failed: {e}", flush=True)
                 writer.write(b'\x05\x04\x00\x01\x00\x00\x00\x00\x00\x00') # Host unreachable
@@ -113,8 +126,13 @@ class MixedProxyServer:
             # Read remainder of the first request line
             request_line = first_byte
             while True:
-                char = await reader.readexactly(1)
+                char = await asyncio.wait_for(reader.readexactly(1), timeout=READ_TIMEOUT)
                 request_line += char
+                if len(request_line) > MAX_HTTP_LINE_BYTES:
+                    writer.write(b"HTTP/1.1 414 URI Too Long\r\nContent-Length: 0\r\n\r\n")
+                    await writer.drain()
+                    writer.close()
+                    return
                 if request_line.endswith(b'\r\n'):
                     break
 
@@ -128,18 +146,31 @@ class MixedProxyServer:
 
             if method.upper() == 'CONNECT':
                 # CONNECT host:port HTTP/1.1
-                host_port = target.split(':')
-                target_host = host_port[0]
-                target_port = int(host_port[1]) if len(host_port) > 1 else 443
+                target_host, target_port = self.parse_connect_target(target)
+                if not target_host or not self.is_valid_port(target_port):
+                    writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                    await writer.drain()
+                    writer.close()
+                    return
                 
                 # Consume headers
+                header_bytes = 0
                 while True:
                     line = await self.read_line(reader)
+                    header_bytes += len(line)
+                    if header_bytes > MAX_HTTP_HEADER_BYTES:
+                        writer.write(b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\n\r\n")
+                        await writer.drain()
+                        writer.close()
+                        return
                     if not line or line in (b'\r\n', b'\n'):
                         break
 
                 try:
-                    target_reader, target_writer = await asyncio.open_connection(target_host, target_port)
+                    target_reader, target_writer = await asyncio.wait_for(
+                        asyncio.open_connection(target_host, target_port),
+                        timeout=CONNECT_TIMEOUT
+                    )
                 except Exception as e:
                     print(f"[Proxy Debug] HTTP CONNECT to {target_host}:{target_port} failed: {e}", flush=True)
                     writer.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
@@ -158,6 +189,11 @@ class MixedProxyServer:
                 parsed = urllib.parse.urlsplit(target)
                 target_host = parsed.hostname
                 target_port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+                if parsed.scheme not in ("http", "https") or not target_host or not self.is_valid_port(target_port):
+                    writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                    await writer.drain()
+                    writer.close()
+                    return
                 
                 # Reconstruct path and request headers
                 path = parsed.path
@@ -169,17 +205,27 @@ class MixedProxyServer:
                 rebuilt_req = f"{method} {path} HTTP/1.1\r\n"
                 
                 # Consume and rebuild remaining headers
+                header_bytes = 0
                 while True:
                     line = await self.read_line(reader)
                     if not line:
                         break
+                    header_bytes += len(line)
+                    if header_bytes > MAX_HTTP_HEADER_BYTES:
+                        writer.write(b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\n\r\n")
+                        await writer.drain()
+                        writer.close()
+                        return
                     line_str = line.decode('utf-8', errors='replace')
                     rebuilt_req += line_str
                     if line in (b'\r\n', b'\n'):
                         break
 
                 try:
-                    target_reader, target_writer = await asyncio.open_connection(target_host, target_port)
+                    target_reader, target_writer = await asyncio.wait_for(
+                        asyncio.open_connection(target_host, target_port),
+                        timeout=CONNECT_TIMEOUT
+                    )
                 except Exception as e:
                     print(f"[Proxy Debug] HTTP Relaying to {target_host}:{target_port} failed: {e}", flush=True)
                     writer.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
@@ -202,13 +248,35 @@ class MixedProxyServer:
         line = b''
         try:
             while True:
-                char = await reader.readexactly(1)
+                char = await asyncio.wait_for(reader.readexactly(1), timeout=READ_TIMEOUT)
                 line += char
+                if len(line) > MAX_HTTP_LINE_BYTES:
+                    return b''
                 if line.endswith(b'\n'):
                     break
             return line
         except Exception:
             return b''
+
+    def parse_connect_target(self, target):
+        if target.startswith("["):
+            end = target.find("]")
+            if end == -1:
+                return "", 0
+            host = target[1:end]
+            port_text = target[end + 2:] if target[end + 1:end + 2] == ":" else "443"
+        else:
+            host, _, port_text = target.rpartition(":")
+            if not host:
+                host = target
+                port_text = "443"
+        try:
+            return host, int(port_text)
+        except ValueError:
+            return "", 0
+
+    def is_valid_port(self, port):
+        return isinstance(port, int) and 0 < port <= 65535
 
     async def bridge_connections(self, r1, w1, r2, w2):
         """Asynchronously pipe data bidirectionally between client and target."""
